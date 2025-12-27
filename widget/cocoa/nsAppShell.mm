@@ -23,6 +23,7 @@
 #include "nsString.h"
 #include "nsIRollupListener.h"
 #include "nsIWidget.h"
+#include "nsStatusBarMenu.h"
 #include "nsMemoryPressure.h"
 #include "nsThreadUtils.h"
 #include "nsServiceManagerUtils.h"
@@ -246,6 +247,12 @@ nsAppShell::~nsAppShell() {
 
   hal::Shutdown();
 
+  // Cleanup status bar menu
+  if (mStatusBarMenu) {
+    delete mStatusBarMenu;
+    mStatusBarMenu = nullptr;
+  }
+
   if (mMemoryPressureSource) {
     dispatch_release(mMemoryPressureSource);
     mMemoryPressureSource = nullptr;
@@ -361,9 +368,29 @@ nsresult nsAppShell::Init() {
   // NSApplicationMain() is running).
   NSAutoreleasePool* localPool = [[NSAutoreleasePool alloc] init];
 
-  char* mozAppNoDock = PR_GetEnv("MOZ_APP_NO_DOCK");
-  if (mozAppNoDock && strcmp(mozAppNoDock, "") != 0) {
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+  if (XRE_IsParentProcess()) {
+    char* mozAppNoDock = PR_GetEnv("MOZ_APP_NO_DOCK");
+    if (mozAppNoDock && strcmp(mozAppNoDock, "") != 0) {
+      printf("🦊 MOZ_APP_NO_DOCK detected: %s\n", mozAppNoDock);
+      [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+      printf("🦊 Set activation policy to Accessory\n");
+
+      // Create status bar menu when dock icon is hidden
+      mStatusBarMenu = new nsStatusBarMenu();
+      if (mStatusBarMenu) {
+        printf("🦊 Creating status bar menu...\n");
+        bool rv = mStatusBarMenu->Init();
+        if (!rv) {
+          printf("🦊 Failed to initialize status bar menu\n");
+          delete mStatusBarMenu;
+          mStatusBarMenu = nullptr;
+        } else {
+          printf("🦊 Status bar menu created successfully!\n");
+        }
+      }
+    } else {
+      printf("🦊 MOZ_APP_NO_DOCK not set\n");
+    }
   }
 
   // mAutoreleasePools is used as a stack of NSAutoreleasePool objects created

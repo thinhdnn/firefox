@@ -58,6 +58,7 @@
 #include "nsCocoaFeatures.h"
 #include "nsIScreenManager.h"
 #include "nsIWidgetListener.h"
+#include "prenv.h"
 #include "nsXULPopupManager.h"
 #include "VibrancyManager.h"
 #include "nsPresContext.h"
@@ -5029,10 +5030,15 @@ void nsCocoaWindow::Show(bool aState) {
       mParent ? (NSWindow*)mParent->GetNativeData(NS_NATIVE_WINDOW) : nil;
 
   if (aState && !mBounds.IsEmpty()) {
-    // If we had set the activationPolicy to accessory, then right now we won't
-    // have a dock icon. Make sure that we undo that and show a dock icon now
-    // that we're going to show a window.
-    if (NSApp.activationPolicy != NSApplicationActivationPolicyRegular) {
+    bool hideDockMode = false;
+    if (char* mozAppNoDock = PR_GetEnv("MOZ_APP_NO_DOCK")) {
+      hideDockMode = mozAppNoDock[0] != '\0';
+    }
+
+    // Only switch back to a Dock-present activation policy when we're not
+    // running in status-menu mode (i.e., MOZ_APP_NO_DOCK unset).
+    if (!hideDockMode &&
+        NSApp.activationPolicy != NSApplicationActivationPolicyRegular) {
       NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
       PR_SetEnv("MOZ_APP_NO_DOCK=");
     }

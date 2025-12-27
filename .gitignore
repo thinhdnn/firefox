@@ -369,3 +369,4 @@ toolkit/crashreporter/minidump-analyzer/analyzer-test/target/
 
 # Ignore mozperftest artifacts folder
 /artifacts/
+/.venv

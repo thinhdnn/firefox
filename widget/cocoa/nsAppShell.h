@@ -82,6 +82,9 @@ class nsAppShell : public nsBaseAppShell {
   // For getting notifications from the OS about memory pressure state changes.
   dispatch_source_t mMemoryPressureSource = nullptr;
 
+  // Status bar menu for dock-hidden mode
+  class nsStatusBarMenu* mStatusBarMenu = nullptr;
+
   bool mRunningEventLoop;
   bool mStarted;
   bool mTerminated;

@@ -1,0 +1,63 @@
+name: Build macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-type:
+        description: "mach package target (browser by default)"
+        required: false
+        default: "browser"
+
+jobs:
+  build-dmg:
+    name: Build Firefox DMG
+    runs-on: macos-14
+    timeout-minutes: 360
+    env:
+      MOZ_AUTOMATION: 1
+      # Allow mach to assume CI defaults.
+      MOZ_NBUILD: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Write .mozconfig
+        run: |
+          cat <<'EOF' > .mozconfig
+          mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-esr-unbranded
+
+          ac_add_options --enable-application=browser
+          ac_add_options --disable-official-branding
+          ac_add_options --with-branding=browser/branding/unofficial
+          ac_add_options --disable-tests
+          EOF
+
+      - name: Bootstrap build dependencies
+        run: |
+          python3 --version
+          ./mach bootstrap --application-choice=${{ github.event.inputs.build-type || 'browser' }} --no-interactive
+
+      - name: Build Firefox
+        run: ./mach build
+
+      - name: Package DMG
+        run: ./mach package
+
+      - name: Determine objdir
+        run: |
+          OBJDIR=$(./mach environment --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["topobjdir"])')
+          echo "OBJDIR=$OBJDIR" >> $GITHUB_ENV
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-macos-dmg
+          path: ${{ env.OBJDIR }}/dist/*.dmg
+          if-no-files-found: error

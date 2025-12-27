@@ -56,6 +56,7 @@ UNIFIED_SOURCES += [
     "nsPrintSettingsX.mm",
     "nsSound.mm",
     "nsStandaloneNativeMenu.mm",
+    "nsStatusBarMenu.mm",
     "nsSystemStatusBarCocoa.mm",
     "nsToolkit.mm",
     "nsTouchBar.mm",
