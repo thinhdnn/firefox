@@ -17,6 +17,7 @@ jobs:
       MOZ_AUTOMATION: 1
       # Allow mach to assume CI defaults.
       MOZ_NBUILD: 1
+      MACH_USE_SYSTEM_PYTHON: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
