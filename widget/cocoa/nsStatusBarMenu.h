@@ -23,11 +23,14 @@ class nsStatusBarMenu {
   void Hide();
   
   void MenuItemClicked(NSMenuItem* aItem);
+  void UpdatePasswordMenuItems();
 
  private:
   NSStatusItem* mStatusItem;
   NSMenu* mMenu;
   MOZStatusBarTarget* mTarget;
+  NSMenuItem* mSetPasswordItem;
+  NSMenuItem* mClearPasswordItem;
   
   bool BuildStatusMenu();
 };
@@ -40,7 +43,13 @@ class nsStatusBarMenu {
 - (void)menuItemClicked:(id)sender;
 - (void)showMainWindow:(id)sender;
 - (void)hideToStatusBar:(id)sender;
+- (BOOL)promptForPassword;
+- (void)setPassword:(id)sender;
+- (void)clearPassword:(id)sender;
 - (void)quitApplication:(id)sender;
+- (void)attachCloseButtonHandlerToWindow:(NSWindow*)window;
+- (void)attachCloseButtonHandlersToAllWindows;
+- (void)handleWindowCloseButton:(id)sender;
 
 @end
 

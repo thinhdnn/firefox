@@ -16,7 +16,61 @@
 #include "nsError.h"
 #include "nsIWidget.h"
 
+#import <CommonCrypto/CommonDigest.h>
+
 namespace {
+
+static NSString* const kStatusBarPasswordDefaultsKey =
+    @"StatusBarModePasswordHash";
+
+static bool sRequirePasswordOnNextShow = false;
+
+static NSString* HashForPassword(NSString* aPassword) {
+  if (!aPassword) {
+    return @"";
+  }
+
+  NSData* data = [aPassword dataUsingEncoding:NSUTF8StringEncoding];
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256((const unsigned char*)[data bytes], (CC_LONG)[data length],
+            digest);
+
+  NSMutableString* hex = [NSMutableString
+      stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+  for (NSUInteger i = 0; i < CC_SHA256_DIGEST_LENGTH; ++i) {
+    [hex appendFormat:@"%02x", digest[i]];
+  }
+  return hex;
+}
+
+static void StorePasswordHash(NSString* aHash) {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  if (aHash && [aHash length] > 0) {
+    [defaults setObject:aHash forKey:kStatusBarPasswordDefaultsKey];
+  } else {
+    [defaults removeObjectForKey:kStatusBarPasswordDefaultsKey];
+  }
+  [defaults synchronize];
+}
+
+static bool PasswordIsConfigured() {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  NSString* hash =
+      [defaults stringForKey:kStatusBarPasswordDefaultsKey];
+  return hash && [hash length] > 0;
+}
+
+static bool VerifyPasswordValue(NSString* aPassword) {
+  if (!PasswordIsConfigured()) {
+    return true;
+  }
+
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  NSString* storedHash =
+      [defaults stringForKey:kStatusBarPasswordDefaultsKey];
+  return storedHash &&
+         [storedHash isEqualToString:HashForPassword(aPassword ?: @"")];
+}
 
 static bool ShowCocoaWindow(NSWindow* aWindow) {
   if (!aWindow) {
@@ -88,16 +142,29 @@ static bool RestoreViaWindowMediator() {
 }
 
 static bool RestoreFirefoxWindows() {
+  // Prefer restoring already-existing windows via the mediator first so we do
+  // not accidentally spawn a fresh session when real windows still exist.
+  if (RestoreViaWindowMediator()) {
+    return true;
+  }
+
+  // If the mediator could not find anything (for example after the user
+  // intentionally closed every window), fall back to the native ReOpen() logic
+  // so they still get a new browser window instead of nothing happening.
   nsCOMPtr<nsINativeAppSupport> nativeSupport = NS_GetNativeAppSupport();
   if (nativeSupport) {
     nativeSupport->ReOpen();
     return true;
   }
 
-  return RestoreViaWindowMediator();
+  return false;
 }
 
 }  // namespace
+
+@interface MOZStatusBarTarget ()
+- (BOOL)isBrowserWindow:(NSWindow*)window;
+@end
 
 // MOZStatusBarTarget implementation
 @implementation MOZStatusBarTarget
@@ -118,59 +185,88 @@ static bool RestoreFirefoxWindows() {
 - (void)showMainWindow:(id)sender {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
   
+  if (PasswordIsConfigured() && sRequirePasswordOnNextShow) {
+    if (![self promptForPassword]) {
+      printf("🦊 Password verification failed or cancelled\n");
+      return;
+    }
+    sRequirePasswordOnNextShow = false;
+  }
+
   printf("🦊 Show Firefox clicked\n");
   
-  // First, try sending a notification to show windows
-  [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowFirefoxWindows" object:nil];
-  
-  // Activate without switching to a Dock-visible activation policy
-  NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
-  [currentApp activateWithOptions:NSApplicationActivateAllWindows |
-                                 NSApplicationActivateIgnoringOtherApps];
+  // Count existing windows first
+  int windowCount = 0;
+  NSWindow* browserWindow = nil;
+  for (NSWindow* window in [NSApp windows]) {
+    if (window.contentView != nil) {
+      windowCount++;
+      NSSize frameSize = window.frame.size;
+      printf("🦊 Existing window: %s (visible: %s, frame: %.0fx%.0f)\n", 
+             [window.className UTF8String], 
+             [window isVisible] ? "YES" : "NO",
+             frameSize.width, frameSize.height);
 
+      [self attachCloseButtonHandlerToWindow:window];
+      
+      // Try to identify the main browser window
+      if ([window.className isEqualToString:@"NSWindow"] || 
+          [window.className isEqualToString:@"BorderlessWindow"] ||
+          [window.className isEqualToString:@"ToolbarWindow"]) {
+        printf("🦊 Checking potential browser window: %s, size: %.0fx%.0f\n", 
+               [window.className UTF8String], frameSize.width, frameSize.height);
+        
+        if (frameSize.width > 400 && frameSize.height > 300) {
+          browserWindow = window;
+          printf("🦊 ✅ Identified browser window: %s (%.0fx%.0f)\n", 
+                 [window.className UTF8String], frameSize.width, frameSize.height);
+        } else {
+          printf("🦊 ❌ Window too small: %s (%.0fx%.0f)\n", 
+                 [window.className UTF8String], frameSize.width, frameSize.height);
+        }
+      }
+    }
+  }
+  printf("🦊 Total windows found: %d\n", windowCount);
+  
+  // If we have a browser window, try to show it directly first
+  if (browserWindow) {
+    printf("🦊 Attempting to show existing browser window\n");
+    [self attachCloseButtonHandlerToWindow:browserWindow];
+    [browserWindow setIsVisible:YES];
+    [browserWindow makeKeyAndOrderFront:nil];
+    [browserWindow orderFrontRegardless];
+    [browserWindow deminiaturize:nil];
+    
+    // Activate app after showing window
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+      [currentApp activateWithOptions:NSApplicationActivateAllWindows |
+                                     NSApplicationActivateIgnoringOtherApps];
+    });
+    
+    printf("🦊 Direct window restore completed\n");
+    return; // Skip Gecko restore to avoid conflicts
+  }
+  
+  // Try Gecko restore only if no existing browser window
+  printf("🦊 No browser window found, trying Gecko restore\n");
   bool restoredByGecko = RestoreFirefoxWindows();
   if (restoredByGecko) {
     printf("🦊 Restored windows via Gecko window mediator\n");
-  } else {
-    // Small delay to let activation complete
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-      // Now show windows
-      BOOL foundMainWindow = NO;
-      
-      for (NSWindow* window in [NSApp windows]) {
-        // Look for browser windows (exclude panels, menus, etc)
-        if (window.contentView != nil && 
-            ![window.className containsString:@"Panel"] &&
-            ![window.className containsString:@"Menu"] &&
-            ![window.className containsString:@"Popup"] &&
-            window.frame.size.width > 300 && 
-            window.frame.size.height > 200) {
-          
-          printf("🦊 Found browser window: %s\n", [window.className UTF8String]);
-          
-          // Try multiple ways to show the window
-          [window setIsVisible:YES];
-          [window makeKeyAndOrderFront:nil];
-          [window orderFrontRegardless];
-          [window deminiaturize:nil]; // In case it's minimized
-          
-          foundMainWindow = YES;
-        }
-      }
-      
-      if (!foundMainWindow) {
-        printf("🦊 No suitable window found, showing all windows\n");
-        for (NSWindow* window in [NSApp windows]) {
-          if (window.contentView != nil) {
-            printf("🦊 Showing window: %s\n", [window.className UTF8String]);
-            [window setIsVisible:YES];
-            [window makeKeyAndOrderFront:nil];
-            [window deminiaturize:nil];
-          }
-        }
-      }
-
+    // Activate app to bring windows forward, but avoid policy conflicts
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+      [currentApp activateWithOptions:NSApplicationActivateAllWindows |
+                                     NSApplicationActivateIgnoringOtherApps];
     });
+
+    // Ensure newly created windows get close-button interceptors
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      [self attachCloseButtonHandlersToAllWindows];
+    });
+  } else {
+    printf("🦊 Gecko restore failed, no fallback available\n");
   }
   
   NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -189,17 +285,226 @@ static bool RestoreFirefoxWindows() {
   
   printf("🦊 Hide to status bar clicked\n");
   
-  // Hide all windows
-  for (NSWindow* window in [NSApp windows]) {
-    if ([window isVisible] && window.contentView != nil) {
-      [window orderOut:nil];
-    }
+  // Hide the entire app (windows stay alive, preserving session state)
+  [[NSRunningApplication currentApplication] hide];
+  [NSApp hide:nil];
+  printf("🦊 Application hidden via NSApp hide\n");
+
+  // Ensure activation policy stays in accessory mode for status-bar presence
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+  printf("🦊 Confirmed activation policy Accessory after hide\n");
+  if (PasswordIsConfigured()) {
+    sRequirePasswordOnNextShow = true;
   }
   
-  // Change activation policy back to accessory
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-  printf("🦊 Set activation policy back to Accessory\n");
-  
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (BOOL)promptForPassword {
+  while (true) {
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Enter password to show Firefox"];
+    [alert setInformativeText:@"Firefox is hidden and requires your password before restoring windows."];
+    [alert addButtonWithTitle:@"Unlock"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 260, 30)];
+    NSSecureTextField* passwordField =
+        [[NSSecureTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)];
+    [passwordField setPlaceholderString:@"Password"];
+    [accessory addSubview:passwordField];
+    [alert setAccessoryView:accessory];
+
+    NSModalResponse response = [alert runModal];
+
+    NSString* input = [[passwordField stringValue] copy];
+
+    [passwordField release];
+    [accessory release];
+    [alert release];
+
+    if (response != NSAlertFirstButtonReturn) {
+      [input release];
+      return NO;
+    }
+
+    bool verified = VerifyPasswordValue(input);
+    [input release];
+    if (verified) {
+      return YES;
+    }
+
+    NSAlert* errorAlert = [[NSAlert alloc] init];
+    [errorAlert setMessageText:@"Incorrect password"];
+    [errorAlert setInformativeText:@"Please try again."];
+    [errorAlert addButtonWithTitle:@"OK"];
+    [errorAlert runModal];
+    [errorAlert release];
+  }
+}
+
+- (void)setPassword:(id)sender {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  NSAlert* alert = [[NSAlert alloc] init];
+  [alert setMessageText:@"Set password"];
+  [alert setInformativeText:@"Enter and confirm the password required before Firefox windows can be shown again."];
+  [alert addButtonWithTitle:@"Save"];
+  [alert addButtonWithTitle:@"Cancel"];
+
+  NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 64)];
+  NSSecureTextField* newField =
+      [[NSSecureTextField alloc] initWithFrame:NSMakeRect(0, 32, 280, 24)];
+  [newField setPlaceholderString:@"New password"];
+  NSSecureTextField* confirmField =
+      [[NSSecureTextField alloc] initWithFrame:NSMakeRect(0, 0, 280, 24)];
+  [confirmField setPlaceholderString:@"Confirm password"];
+  [accessory addSubview:newField];
+  [accessory addSubview:confirmField];
+  [alert setAccessoryView:accessory];
+
+  NSModalResponse response = [alert runModal];
+
+  NSString* newPassword = [[newField stringValue] copy];
+  NSString* confirmPassword = [[confirmField stringValue] copy];
+
+  [newField release];
+  [confirmField release];
+  [accessory release];
+      // Make sure the app is unhidden before toggling visibility so AppKit keeps
+      // the window hierarchy alive without forcing Dock presence.
+      [[NSRunningApplication currentApplication] unhide];
+      [NSApp unhide:nil];
+
+  [alert release];
+
+  if (response != NSAlertFirstButtonReturn) {
+    [newPassword release];
+    [confirmPassword release];
+    return;
+  }
+
+  if (![newPassword length]) {
+    NSAlert* errorAlert = [[NSAlert alloc] init];
+    [errorAlert setMessageText:@"Password required"];
+    [errorAlert setInformativeText:@"Please enter a non-empty password."];
+    [errorAlert addButtonWithTitle:@"OK"];
+    [errorAlert runModal];
+    [errorAlert release];
+    [newPassword release];
+    [confirmPassword release];
+    return;
+  }
+
+  if (![newPassword isEqualToString:confirmPassword]) {
+    NSAlert* mismatchAlert = [[NSAlert alloc] init];
+    [mismatchAlert setMessageText:@"Passwords do not match"];
+    [mismatchAlert setInformativeText:@"Please try again."];
+    [mismatchAlert addButtonWithTitle:@"OK"];
+    [mismatchAlert runModal];
+    [mismatchAlert release];
+    [newPassword release];
+    [confirmPassword release];
+    return;
+  }
+
+  StorePasswordHash(HashForPassword(newPassword));
+  sRequirePasswordOnNextShow = true;
+  if (mStatusBarMenu) {
+    mStatusBarMenu->UpdatePasswordMenuItems();
+  }
+  printf("🦊 Status bar password updated\n");
+
+  [newPassword release];
+  [confirmPassword release];
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (void)clearPassword:(id)sender {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  if (!PasswordIsConfigured()) {
+    return;
+  }
+
+  NSAlert* alert = [[NSAlert alloc] init];
+  [alert setMessageText:@"Clear password?"];
+  [alert setInformativeText:@"Firefox will no longer ask for a password before showing windows."];
+  [alert addButtonWithTitle:@"Clear"];
+  [alert addButtonWithTitle:@"Cancel"];
+
+  NSModalResponse response = [alert runModal];
+  [alert release];
+
+  if (response != NSAlertFirstButtonReturn) {
+    return;
+  }
+
+  StorePasswordHash(@"");
+  sRequirePasswordOnNextShow = false;
+  if (mStatusBarMenu) {
+    mStatusBarMenu->UpdatePasswordMenuItems();
+  }
+  printf("🦊 Status bar password cleared\n");
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (BOOL)isBrowserWindow:(NSWindow*)window {
+  if (!window || window.contentView == nil) {
+    return NO;
+  }
+  NSString* className = window.className;
+  return [className isEqualToString:@"ToolbarWindow"] ||
+         [className isEqualToString:@"NSWindow"] ||
+         [className isEqualToString:@"BorderlessWindow"];
+}
+
+- (void)attachCloseButtonHandlerToWindow:(NSWindow*)window {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  if (![self isBrowserWindow:window]) {
+    return;
+  }
+
+  NSButton* closeButton = [window standardWindowButton:NSWindowCloseButton];
+  if (!closeButton) {
+    return;
+  }
+
+  if ([closeButton target] == self &&
+      [closeButton action] == @selector(handleWindowCloseButton:)) {
+    return;
+  }
+
+  printf("🦊 Installing close-button interceptor for %s\n",
+         [window.className UTF8String]);
+  [closeButton setTarget:self];
+  [closeButton setAction:@selector(handleWindowCloseButton:)];
+  [closeButton setToolTip:@"Hide Firefox to the status bar"];
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (void)attachCloseButtonHandlersToAllWindows {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  for (NSWindow* window in [NSApp windows]) {
+    [self attachCloseButtonHandlerToWindow:window];
+  }
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (void)handleWindowCloseButton:(id)sender {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  NSWindow* window = [sender window];
+  printf("🦊 Close button intercepted for window: %s\n",
+         [window.className UTF8String]);
+  [self hideToStatusBar:nil];
+
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
@@ -209,7 +514,9 @@ static bool RestoreFirefoxWindows() {
 nsStatusBarMenu::nsStatusBarMenu()
     : mStatusItem(nullptr),
       mMenu(nullptr),
-      mTarget(nullptr) {
+      mTarget(nullptr),
+      mSetPasswordItem(nullptr),
+      mClearPasswordItem(nullptr) {
 }
 
 nsStatusBarMenu::~nsStatusBarMenu() {
@@ -218,14 +525,27 @@ nsStatusBarMenu::~nsStatusBarMenu() {
   if (mStatusItem) {
     [[NSStatusBar systemStatusBar] removeStatusItem:mStatusItem];
     [mStatusItem release];
+    mStatusItem = nil;
   }
   
   if (mMenu) {
     [mMenu release];
+    mMenu = nil;
+  }
+
+  if (mSetPasswordItem) {
+    [mSetPasswordItem release];
+    mSetPasswordItem = nil;
+  }
+
+  if (mClearPasswordItem) {
+    [mClearPasswordItem release];
+    mClearPasswordItem = nil;
   }
   
   if (mTarget) {
     [mTarget release];
+    mTarget = nil;
   }
   
   NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -285,6 +605,9 @@ bool nsStatusBarMenu::Init() {
   [mStatusItem setMenu:mMenu];
   [mStatusItem setHighlightMode:YES];
   
+  // Install close-button interceptors on any existing windows
+  [mTarget attachCloseButtonHandlersToAllWindows];
+  
   return true;
   
   NS_OBJC_END_TRY_BLOCK_RETURN(false);
@@ -317,6 +640,28 @@ bool nsStatusBarMenu::BuildStatusMenu() {
   [hideItem setTarget:mTarget];
   [mMenu addItem:hideItem];
   [hideItem release];
+
+  // Separator
+  [mMenu addItem:[NSMenuItem separatorItem]];
+
+  // Password controls
+  NSMenuItem* setPasswordItem =
+      [[NSMenuItem alloc] initWithTitle:@"Set Password…"
+                                 action:@selector(setPassword:)
+                          keyEquivalent:@""];
+  [setPasswordItem setTarget:mTarget];
+  [mMenu addItem:setPasswordItem];
+  mSetPasswordItem = [setPasswordItem retain];
+  [setPasswordItem release];
+
+  NSMenuItem* clearPasswordItem =
+      [[NSMenuItem alloc] initWithTitle:@"Clear Password"
+                                 action:@selector(clearPassword:)
+                          keyEquivalent:@""];
+  [clearPasswordItem setTarget:mTarget];
+  [mMenu addItem:clearPasswordItem];
+  mClearPasswordItem = [clearPasswordItem retain];
+  [clearPasswordItem release];
   
   // Separator
   [mMenu addItem:[NSMenuItem separatorItem]];
@@ -342,6 +687,8 @@ bool nsStatusBarMenu::BuildStatusMenu() {
   [quitItem setTarget:mTarget];
   [mMenu addItem:quitItem];
   [quitItem release];
+
+  UpdatePasswordMenuItems();
   
   return true;
   
@@ -375,6 +722,21 @@ void nsStatusBarMenu::SetIcon(NSImage* aIcon) {
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
+void nsStatusBarMenu::UpdatePasswordMenuItems() {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  BOOL hasPassword = PasswordIsConfigured();
+  if (mSetPasswordItem) {
+    NSString* title = hasPassword ? @"Change Password…" : @"Set Password…";
+    [mSetPasswordItem setTitle:title];
+  }
+  if (mClearPasswordItem) {
+    [mClearPasswordItem setEnabled:hasPassword];
+  }
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
 void nsStatusBarMenu::Show() {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
   
@@ -405,12 +767,12 @@ void nsStatusBarMenu::MenuItemClicked(NSMenuItem* aItem) {
   NSInteger tag = [aItem tag];
   
   switch (tag) {
-    case 1001: // About Firefox
-      // Could open about dialog here
-      // For now, just activate the app
-      [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-      [NSApp activateIgnoringOtherApps:YES];
+    case 1001: { // About Firefox - braces needed for variable declaration
+      NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+      [currentApp activateWithOptions:NSApplicationActivateAllWindows |
+                                     NSApplicationActivateIgnoringOtherApps];
       break;
+    }
     default:
       break;
   }
