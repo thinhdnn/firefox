@@ -43,7 +43,7 @@ jobs:
       - name: Bootstrap build dependencies
         run: |
           python3 --version
-          ./mach bootstrap --application-choice=${{ github.event.inputs.build-type || 'browser' }} --no-interactive
+          ./mach bootstrap --application-choice=${{ github.event.inputs.build-type || 'browser' }}
 
       - name: Build Firefox
         run: ./mach build
