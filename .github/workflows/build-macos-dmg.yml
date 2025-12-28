@@ -21,7 +21,7 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
 
-      # IMPORTANT: keep main build on Apple toolchain
+      # Main build must use Apple clang on macOS
       CC: /usr/bin/clang
       CXX: /usr/bin/clang++
 
@@ -37,12 +37,18 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install WASI sysroot + LLVM for wasm only
+      - name: Install ld64.lld (Mach-O lld)
+        run: |
+          brew tap keith/formulae
+          brew install ld64.lld
+          echo "$(brew --prefix ld64.lld)/bin" >> $GITHUB_PATH
+          which ld64.lld
+          ld64.lld --version || true
+
+      - name: Install LLVM + WASI sysroot (for wasm only)
         run: |
           brew install llvm wasi-libc wasi-runtimes
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-          # sanity: Apple clang is used for main build
           /usr/bin/clang --version
 
       - name: Write .mozconfig
