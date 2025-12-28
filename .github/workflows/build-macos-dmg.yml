@@ -18,7 +18,6 @@ jobs:
       MOZ_NBUILD: 1
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
 
-      # make brew faster/less random on CI
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
 
@@ -39,7 +38,6 @@ jobs:
           brew install lld
           echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
           which ld64.lld || true
-          which lld || true
 
       - name: Write .mozconfig
         run: |
@@ -51,7 +49,7 @@ jobs:
           ac_add_options --with-branding=browser/branding/unofficial
           ac_add_options --disable-tests
 
-          # macOS 15: avoid ld64 detection issues by using lld
+          # macOS 15: avoid ld64 detection weirdness
           ac_add_options --enable-linker=lld
           EOF
 
@@ -59,6 +57,12 @@ jobs:
         run: |
           python3 --version
           ./mach bootstrap --application-choice=${{ github.event.inputs.build-type || 'browser' }}
+
+      - name: Install cbindgen (required)
+        run: |
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          cargo install cbindgen --locked
+          cbindgen --version
 
       - name: Build Firefox
         run: ./mach build
