@@ -11,13 +11,11 @@ on:
 jobs:
   build-dmg:
     name: Build Firefox DMG
-    runs-on: macos-14
+    runs-on: macos-15 # 👈 MỚI: chuyển từ macos-14 lên macos-15
     timeout-minutes: 360
     env:
       MOZ_AUTOMATION: 1
       MOZ_NBUILD: 1
-
-      # Force Mach to create/use venv and pip-install deps (avoids SitePackagesSource assert)
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
 
     steps:
