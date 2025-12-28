@@ -17,11 +17,10 @@ jobs:
       MOZ_AUTOMATION: 1
       MOZ_NBUILD: 1
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
-
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
 
-      # Main build must use Apple clang on macOS
+      # Main build toolchain on macOS
       CC: /usr/bin/clang
       CXX: /usr/bin/clang++
 
@@ -37,19 +36,17 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install ld64.lld (Mach-O lld)
+      - name: Install LLVM + WASI + LLD (wasm-ld)
         run: |
-          brew tap keith/formulae
-          brew install ld64.lld
-          echo "$(brew --prefix ld64.lld)/bin" >> $GITHUB_PATH
-          which ld64.lld
-          ld64.lld --version || true
-
-      - name: Install LLVM + WASI sysroot (for wasm only)
-        run: |
-          brew install llvm wasi-libc wasi-runtimes
+          brew install llvm lld wasi-libc wasi-runtimes
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          /usr/bin/clang --version
+
+          which clang
+          which wasm-ld
+          clang --version
+          wasm-ld --version
 
       - name: Write .mozconfig
         run: |
@@ -67,14 +64,11 @@ jobs:
           ac_add_options --with-branding=browser/branding/unofficial
           ac_add_options --disable-tests
 
-          # Use Homebrew LLVM ONLY for wasm32-wasi
+          # wasm32-wasi toolchain
           export WASM_CC="$LLVM_BIN/clang"
           export WASM_CXX="$LLVM_BIN/clang++"
           ac_add_options --with-wasi-sysroot=$WASI_SYSROOT
           EOF
-
-          echo "----- .mozconfig -----"
-          cat .mozconfig
 
       - name: Bootstrap build dependencies
         run: |
