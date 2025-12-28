@@ -11,12 +11,16 @@ on:
 jobs:
   build-dmg:
     name: Build Firefox DMG
-    runs-on: macos-15 # 👈 MỚI: chuyển từ macos-14 lên macos-15
+    runs-on: macos-15
     timeout-minutes: 360
     env:
       MOZ_AUTOMATION: 1
       MOZ_NBUILD: 1
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
+
+      # make brew faster/less random on CI
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
 
     steps:
       - name: Checkout (fast)
@@ -30,6 +34,13 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Install LLD (ld64.lld)
+        run: |
+          brew install lld
+          echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
+          which ld64.lld || true
+          which lld || true
+
       - name: Write .mozconfig
         run: |
           cat <<'EOF' > .mozconfig
@@ -39,6 +50,9 @@ jobs:
           ac_add_options --disable-official-branding
           ac_add_options --with-branding=browser/branding/unofficial
           ac_add_options --disable-tests
+
+          # macOS 15: avoid ld64 detection issues by using lld
+          ac_add_options --enable-linker=lld
           EOF
 
       - name: Bootstrap build dependencies
