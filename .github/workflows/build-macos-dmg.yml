@@ -11,14 +11,14 @@ on:
 jobs:
   build-dmg:
     name: Build Firefox DMG
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 360
     env:
       MOZ_AUTOMATION: 1
       MOZ_NBUILD: 1
 
-      # MACH_USE_SYSTEM_PYTHON is deprecated and can trigger mach bootstrap AssertionError
-      MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: none
+      # Force Mach to create/use venv and pip-install deps (avoids SitePackagesSource assert)
+      MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
 
     steps:
       - name: Checkout (fast)
