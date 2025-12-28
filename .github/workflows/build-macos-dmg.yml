@@ -24,11 +24,11 @@ jobs:
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: none
 
     steps:
-      - name: Checkout
+      - name: Checkout (fast)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: esr140
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
