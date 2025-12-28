@@ -15,20 +15,17 @@ jobs:
     timeout-minutes: 360
     env:
       MOZ_AUTOMATION: 1
-      # Allow mach to assume CI defaults.
       MOZ_NBUILD: 1
 
-      # NOTE:
-      # MACH_USE_SYSTEM_PYTHON is deprecated and can trigger an AssertionError in mach bootstrap.
-      # Use this instead:
+      # MACH_USE_SYSTEM_PYTHON is deprecated and can trigger mach bootstrap AssertionError
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: none
 
     steps:
       - name: Checkout (fast)
         uses: actions/checkout@v4
         with:
-          ref: esr140
           fetch-depth: 1
+          ref: esr140
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,7 +46,7 @@ jobs:
       - name: Bootstrap build dependencies
         run: |
           python3 --version
-          ./mach bootstrap --no-interactive --application-choice=${{ github.event.inputs.build-type || 'browser' }}
+          ./mach bootstrap --application-choice=${{ github.event.inputs.build-type || 'browser' }}
 
       - name: Build Firefox
         run: ./mach build
