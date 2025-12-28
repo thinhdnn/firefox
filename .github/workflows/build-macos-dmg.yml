@@ -33,15 +33,26 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install LLD (ld64.lld)
+      - name: Install LLVM + WASI sysroot
         run: |
-          brew install lld
-          echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
-          which ld64.lld || true
+          brew install llvm wasi-libc wasi-runtimes
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+          # Quick sanity:
+          "$(brew --prefix llvm)/bin/clang" --version
 
       - name: Write .mozconfig
         run: |
-          cat <<'EOF' > .mozconfig
+          LLVM_BIN="$(brew --prefix llvm)/bin"
+          WASI_SYSROOT="$(brew --prefix wasi-libc)/share/wasi-sysroot"
+
+          # fallback if brew layout differs a bit
+          if [ ! -d "$WASI_SYSROOT" ]; then
+            WASI_SYSROOT="$(brew --prefix wasi-libc)/share"
+          fi
+
+          cat <<EOF > .mozconfig
           mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-esr-unbranded
 
           ac_add_options --enable-application=browser
@@ -49,9 +60,19 @@ jobs:
           ac_add_options --with-branding=browser/branding/unofficial
           ac_add_options --disable-tests
 
-          # macOS 15: avoid ld64 detection weirdness
+          # macOS 15: use lld
           ac_add_options --enable-linker=lld
+
+          # IMPORTANT: use Homebrew LLVM for wasm32-wasi (Xcode clang lacks this target)
+          export WASM_CC="$LLVM_BIN/clang"
+          export WASM_CXX="$LLVM_BIN/clang++"
+
+          # If configure complains about missing WASI sysroot later, keep this:
+          ac_add_options --with-wasi-sysroot=$WASI_SYSROOT
           EOF
+
+          echo "----- .mozconfig -----"
+          cat .mozconfig
 
       - name: Bootstrap build dependencies
         run: |
@@ -60,7 +81,6 @@ jobs:
 
       - name: Install cbindgen (required)
         run: |
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           cargo install cbindgen --locked
           cbindgen --version
 
