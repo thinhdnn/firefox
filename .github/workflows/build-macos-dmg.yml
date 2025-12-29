@@ -19,8 +19,6 @@ jobs:
       MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: pip
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
-
-      # Main build toolchain on macOS
       CC: /usr/bin/clang
       CXX: /usr/bin/clang++
 
@@ -36,27 +34,14 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install LLVM + WASI + LLD (wasm-ld)
+      - name: Install build tools (minimal)
         run: |
-          brew install llvm lld wasi-libc wasi-runtimes
-          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-          echo "$(brew --prefix lld)/bin" >> $GITHUB_PATH
+          brew install lld
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-          which clang
-          which wasm-ld
-          clang --version
-          wasm-ld --version
 
       - name: Write .mozconfig
         run: |
-          LLVM_BIN="$(brew --prefix llvm)/bin"
-          WASI_SYSROOT="$(brew --prefix wasi-libc)/share/wasi-sysroot"
-          if [ ! -d "$WASI_SYSROOT" ]; then
-            WASI_SYSROOT="$(brew --prefix wasi-libc)/share"
-          fi
-
-          cat <<EOF > .mozconfig
+          cat <<'EOF' > .mozconfig
           mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-esr-unbranded
 
           ac_add_options --enable-application=browser
@@ -64,10 +49,8 @@ jobs:
           ac_add_options --with-branding=browser/branding/unofficial
           ac_add_options --disable-tests
 
-          # wasm32-wasi toolchain
-          export WASM_CC="$LLVM_BIN/clang"
-          export WASM_CXX="$LLVM_BIN/clang++"
-          ac_add_options --with-wasi-sysroot=$WASI_SYSROOT
+          # Avoid WASI C/C++ toolchain requirements on CI
+          ac_add_options --without-wasm-sandboxed-libraries
           EOF
 
       - name: Bootstrap build dependencies
