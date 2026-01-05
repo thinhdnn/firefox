@@ -1558,6 +1558,9 @@ export const ASRouterTriggerListeners = new Map([
 
       onLocationChange(browser) {
         const tabbrowser = browser.getTabBrowser();
+        if (!tabbrowser) {
+          return;
+        }
         if (browser !== tabbrowser.selectedBrowser) {
           return;
         }

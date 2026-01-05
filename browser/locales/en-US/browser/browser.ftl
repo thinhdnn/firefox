@@ -17,6 +17,33 @@ browser-main-private-window-title = { PLATFORM() ->
 # title (so including the brand name) as a suffix
 browser-main-private-suffix-for-content = Private Browsing
 
+## Protection Password
+
+protection-password-lock-page-title = The app is locked due to company policy.
+
+protection-password-lock-panel =
+    .aria-label = The app is locked due to company policy.
+
+protection-password-lock-heading = The app is locked due to company policy.
+
+protection-password-lock-password-label = Password
+
+protection-password-lock-enter-password = Enter your password
+
+protection-password-lock-wrong-password = Wrong password
+
+# Variables:
+#   $seconds (Number) - The number of seconds the user must wait before trying again.
+protection-password-lock-try-again = Try again in { $seconds }s
+
+protection-password-toolbar-button =
+    .label = Lock
+    .tooltiptext = Lock { -brand-short-name }
+
+protection-password-toolbar-button-locked =
+    .label = Locked
+    .tooltiptext = { -brand-short-name } is locked
+
 # The non-variable portion of this MUST match the translation of
 # "PRIVATE_BROWSING_SHORTCUT_TITLE" in custom.properties
 private-browsing-shortcut-text-2 = { -brand-shortcut-name } Private Browsing

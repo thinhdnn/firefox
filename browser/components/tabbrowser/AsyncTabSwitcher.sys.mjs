@@ -619,11 +619,21 @@ export class AsyncTabSwitcher {
     this.assert(!this.loadTimer || this.loadingTab);
     this.assert(!this.loadingTab || this.loadTimer);
 
+    // If our requested tab has been torn down between events, bail out early
+    // and let the normal cleanup in preActions settle state on the next tick.
+    // This prevents assertion/TypeError spam while we're already recovering.
+    let requestedBrowser = this.requestedTab?.linkedBrowser;
+    if (!requestedBrowser) {
+      this.maybeClearLoadTimer("postActions");
+      this.updateDisplay();
+      return;
+    }
+
     // If we're switching to a non-remote tab, there's no need to wait
     // for it to send layers to the compositor, as this will happen
     // synchronously. Clearing this here means that in the next step,
     // we can load the non-remote browser immediately.
-    if (!this.requestedTab.linkedBrowser.isRemoteBrowser) {
+    if (!requestedBrowser.isRemoteBrowser) {
       this.maybeClearLoadTimer("postActions");
     }
 

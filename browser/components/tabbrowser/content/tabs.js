@@ -1371,6 +1371,9 @@
      * @param {boolean} [shouldScrollInstantly=false]
      */
     #ensureTabIsVisible(tab, shouldScrollInstantly = false) {
+      if (!tab) {
+        return;
+      }
       let arrowScrollbox = tab.closest("arrowscrollbox");
       if (arrowScrollbox?.overflowing) {
         arrowScrollbox.ensureElementIsVisible(tab, shouldScrollInstantly);

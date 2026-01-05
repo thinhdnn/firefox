@@ -558,6 +558,18 @@ split-view-footer {
   }
 }
 
+#window-modal-dialog[protection-password="true"]::backdrop {
+  background-color: #808080;
+}
+
+#window-modal-dialog[protection-password="true"] > .dialogOverlay[topmost="true"] {
+  background-color: transparent;
+}
+
+#window-modal-dialog[protection-password="true"] .dialogBox {
+  box-shadow: none;
+}
+
 .dialogFrame {
   margin: 0;
   flex: 1;

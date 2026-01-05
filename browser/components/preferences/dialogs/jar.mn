@@ -42,3 +42,9 @@ browser.jar:
    content/browser/preferences/dialogs/translationExceptions.xhtml
    content/browser/preferences/dialogs/translationExceptions.js
    content/browser/preferences/dialogs/translations.xhtml
+   content/browser/preferences/dialogs/protectionPasswordSet.xhtml
+   content/browser/preferences/dialogs/protectionPasswordSet.js
+   content/browser/preferences/dialogs/protectionPasswordChange.xhtml
+   content/browser/preferences/dialogs/protectionPasswordChange.js
+   content/browser/preferences/dialogs/protectionPasswordDisable.xhtml
+   content/browser/preferences/dialogs/protectionPasswordDisable.js

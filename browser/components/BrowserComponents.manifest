@@ -22,6 +22,7 @@ category browser-before-ui-startup resource:///modules/AboutHomeStartupCache.sys
 category browser-before-ui-startup resource:///modules/AccountsGlue.sys.mjs AccountsGlue.init
 category browser-before-ui-startup moz-src:///browser/modules/ObserverForwarder.sys.mjs ObserverForwarder.init
 category browser-before-ui-startup resource:///modules/ipprotection/IPProtectionService.sys.mjs IPProtectionService.maybeEarlyInit
+category browser-before-ui-startup resource:///modules/ProtectionPasswordService.sys.mjs ProtectionPasswordService.maybeEarlyInit
 
 # Browser window lifecycle consumers
 category browser-window-domcontentloaded-before-tabbrowser resource:///modules/BrowserDOMWindow.sys.mjs BrowserDOMWindow.setupInWindow
@@ -53,6 +54,7 @@ category browser-first-window-ready resource:///modules/profiles/SelectableProfi
 category browser-first-window-ready moz-src:///browser/components/protections/ContentBlockingPrefs.sys.mjs ContentBlockingPrefs.init
 category browser-first-window-ready resource://gre/modules/CaptchaDetectionPingUtils.sys.mjs CaptchaDetectionPingUtils.init
 category browser-first-window-ready resource:///modules/ipprotection/IPProtectionService.sys.mjs IPProtectionService.init
+category browser-first-window-ready resource:///modules/ProtectionPasswordService.sys.mjs ProtectionPasswordService.init
 #ifdef MOZ_SANDBOX
 #ifdef XP_LINUX
 category browser-first-window-ready resource://gre/modules/SandboxUtils.sys.mjs SandboxUtils.maybeWarnAboutMissingUserNamespaces

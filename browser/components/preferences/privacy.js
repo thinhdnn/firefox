@@ -86,6 +86,8 @@ XPCOMUtils.defineLazyPreferenceGetter(
 ChromeUtils.defineESModuleGetters(this, {
   AppUpdater: "resource://gre/modules/AppUpdater.sys.mjs",
   DoHConfigController: "moz-src:///toolkit/components/doh/DoHConfig.sys.mjs",
+  ProtectionPasswordService:
+    "resource:///modules/ProtectionPasswordService.sys.mjs",
   Sanitizer: "resource:///modules/Sanitizer.sys.mjs",
   SelectableProfileService:
     "resource:///modules/profiles/SelectableProfileService.sys.mjs",
@@ -218,6 +220,10 @@ Preferences.addAll([
   { id: "signon.autofillForms", type: "bool" },
   { id: "signon.management.page.breach-alerts.enabled", type: "bool" },
   { id: "signon.firefoxRelay.feature", type: "string" },
+
+  // Protection Password
+  { id: "browser.protectionPassword.enabled", type: "bool" },
+  { id: "browser.protectionPassword.lockOnStartup", type: "bool" },
 
   // Buttons
   { id: "pref.privacy.disable_button.view_passwords", type: "bool" },
@@ -3817,6 +3823,8 @@ var gPrivacyPane = {
     // Init passwords settings group
     initSettingGroup("passwords");
 
+    this._initProtectionPasswordUI();
+
     this.initListenersForExtensionControllingPasswordManager();
 
     setSyncFromPrefListener("contentBlockingBlockCookiesCheckbox", () =>
@@ -3907,6 +3915,102 @@ var gPrivacyPane = {
 
     // Notify observers that the UI is now ready
     Services.obs.notifyObservers(window, "privacy-pane-loaded");
+  },
+
+  _initProtectionPasswordUI() {
+    setEventListener("protectionPasswordSet", "command", () =>
+      this._openProtectionPasswordSetDialog()
+    );
+    setEventListener("protectionPasswordChange", "command", () =>
+      this._openProtectionPasswordChangeDialog()
+    );
+    setEventListener("protectionPasswordDisable", "command", () =>
+      this._openProtectionPasswordDisableDialog()
+    );
+
+    setEventListener("protectionPasswordEnable", "command", () => {
+      let checkbox = document.getElementById("protectionPasswordEnable");
+      let enabledPref = Preferences.get("browser.protectionPassword.enabled");
+
+      if (checkbox.checked) {
+        if (!ProtectionPasswordService.isPasswordSet) {
+          checkbox.checked = false;
+          enabledPref.value = false;
+          this._openProtectionPasswordSetDialog();
+          return;
+        }
+
+        enabledPref.value = true;
+        this._updateProtectionPasswordUI();
+        return;
+      }
+
+      checkbox.checked = true;
+      enabledPref.value = true;
+      this._openProtectionPasswordDisableDialog();
+    });
+
+    Preferences.get("browser.protectionPassword.enabled").on("change", () =>
+      this._updateProtectionPasswordUI()
+    );
+
+    this._updateProtectionPasswordUI();
+  },
+
+  _updateProtectionPasswordUI() {
+    let enabled = Preferences.get("browser.protectionPassword.enabled").value;
+    let passwordSet = ProtectionPasswordService.isPasswordSet;
+
+    if (enabled && !passwordSet) {
+      Preferences.get("browser.protectionPassword.enabled").value = false;
+      enabled = false;
+    }
+
+    let enableCheckbox = document.getElementById("protectionPasswordEnable");
+    let setButton = document.getElementById("protectionPasswordSet");
+    let changeButton = document.getElementById("protectionPasswordChange");
+    let disableButton = document.getElementById("protectionPasswordDisable");
+    let lockOnStartup = document.getElementById(
+      "protectionPasswordLockOnStartup"
+    );
+
+    enableCheckbox.disabled = !passwordSet;
+    enableCheckbox.checked = enabled;
+
+    setButton.disabled = passwordSet;
+    changeButton.disabled = !passwordSet;
+    disableButton.disabled = !passwordSet || !enabled;
+    lockOnStartup.disabled = !passwordSet || !enabled;
+  },
+
+  _openProtectionPasswordSetDialog() {
+    gSubDialog.open(
+      "chrome://browser/content/preferences/dialogs/protectionPasswordSet.xhtml",
+      {
+        features: "resizable=no",
+        closingCallback: () => this._updateProtectionPasswordUI(),
+      }
+    );
+  },
+
+  _openProtectionPasswordChangeDialog() {
+    gSubDialog.open(
+      "chrome://browser/content/preferences/dialogs/protectionPasswordChange.xhtml",
+      {
+        features: "resizable=no",
+        closingCallback: () => this._updateProtectionPasswordUI(),
+      }
+    );
+  },
+
+  _openProtectionPasswordDisableDialog() {
+    gSubDialog.open(
+      "chrome://browser/content/preferences/dialogs/protectionPasswordDisable.xhtml",
+      {
+        features: "resizable=no",
+        closingCallback: () => this._updateProtectionPasswordUI(),
+      }
+    );
   },
 
   initSiteDataControls() {

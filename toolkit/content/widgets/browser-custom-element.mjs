@@ -922,6 +922,9 @@ export class MozBrowser extends MozElements.MozElementMixin(XULFrameElement) {
       return;
     }
     let { frameLoader } = this;
+    if (!frameLoader) {
+      return;
+    }
     if (frameLoader.remoteTab) {
       frameLoader.remoteTab.preserveLayers(preserve);
     }
@@ -931,7 +934,11 @@ export class MozBrowser extends MozElements.MozElementMixin(XULFrameElement) {
     if (!this.isRemoteBrowser) {
       return;
     }
-    let { remoteTab } = this.frameLoader;
+    let frameLoader = this.frameLoader;
+    if (!frameLoader) {
+      return;
+    }
+    let { remoteTab } = frameLoader;
     if (remoteTab) {
       remoteTab.priorityHint = false;
       remoteTab.deprioritize();

@@ -56,6 +56,7 @@ browser.jar:
         content/browser/browser-pagestyle.js                (content/browser-pagestyle.js)
         content/browser/browser-places.js                   (content/browser-places.js)
         content/browser/browser-profiles.js                 (content/browser-profiles.js)
+        content/browser/browser-protection-password.js      (content/browser-protection-password.js)
         content/browser/browser-safebrowsing.js             (content/browser-safebrowsing.js)
         content/browser/browser-sets.js                     (content/browser-sets.js)
         content/browser/browser-siteIdentity.js             (content/browser-siteIdentity.js)
@@ -105,6 +106,8 @@ browser.jar:
         content/browser/blockedSite.js                  (content/blockedSite.js)
         content/browser/spotlight.html                (content/spotlight.html)
         content/browser/spotlight.js                  (content/spotlight.js)
+        content/browser/protectionPasswordLock.html   (content/protectionPasswordLock.html)
+        content/browser/protectionPasswordLock.js     (content/protectionPasswordLock.js)
 *       content/browser/default-bookmarks.html        (content/default-bookmarks.html)
 
 # L10n resources and overrides.

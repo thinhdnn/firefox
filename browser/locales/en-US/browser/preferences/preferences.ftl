@@ -1483,6 +1483,55 @@ forms-master-pw-change =
 forms-primary-pw-change =
     .label = Change Primary Password…
     .accesskey = P
+
+## Protection Password
+
+protection-password-header = Protection Password
+
+protection-password-enable =
+    .label = Enable Protection Password
+
+protection-password-set-button =
+    .label = Set Password…
+
+protection-password-change-button =
+    .label = Change Password…
+
+protection-password-disable-button =
+    .label = Disable Protection Password…
+
+protection-password-lock-on-startup =
+    .label = Lock { -brand-short-name } on startup
+
+protection-password-set-window =
+    .title = Set Protection Password
+
+protection-password-set-dialog =
+    .buttonlabelaccept = Set Password
+
+protection-password-set-description = Set a Protection Password. There is no reset or recovery.
+
+protection-password-change-window =
+    .title = Change Protection Password
+
+protection-password-change-dialog =
+    .buttonlabelaccept = Change Password
+
+protection-password-disable-window =
+    .title = Disable Protection Password
+
+protection-password-disable-dialog =
+    .buttonlabelaccept = Disable
+
+protection-password-disable-description = Disabling requires your current password.
+
+protection-password-current-password = Current password
+
+protection-password-new-password = New password
+
+protection-password-confirm-password = Confirm password
+
+protection-password-confirm-new-password = Confirm new password
 # Leave this message empty if the translation for "Primary Password" matches
 # "Master Password" in your language. If you're editing the FTL file directly,
 # use { "" } as the value.

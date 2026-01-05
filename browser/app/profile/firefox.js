@@ -3549,6 +3549,16 @@ pref("browser.ipProtection.log", false);
 pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
 pref("browser.ipProtection.added", false);
 
+// Protection Password (global browser lock)
+pref("browser.protectionPassword.enabled", false);
+pref("browser.protectionPassword.lockOnStartup", true);
+pref("browser.protectionPassword.pbkdf2Iterations", 200000);
+pref("browser.protectionPassword.salt", "");
+pref("browser.protectionPassword.verifier", "");
+pref("browser.protectionPassword.failureCount", 0);
+pref("browser.protectionPassword.lockoutUntil", 0);
+pref("browser.protectionPassword.widgetAdded", false);
+
 // Pref to enable aboug:glean redesign.
 pref("about.glean.redesign.enabled", false);
 

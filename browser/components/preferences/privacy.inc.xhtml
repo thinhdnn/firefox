@@ -556,6 +556,39 @@
   <label id="fips-desc" hidden="true" data-l10n-id="forms-master-pw-fips-desc"></label>
 </groupbox>
 
+<!-- Protection Password -->
+<groupbox id="protectionPasswordGroup" data-category="panePrivacy" hidden="true" orient="vertical">
+  <label><html:h2 data-l10n-id="protection-password-header"/></label>
+  <vbox>
+    <hbox align="center">
+      <checkbox id="protectionPasswordEnable"
+                data-l10n-id="protection-password-enable"
+                preference="browser.protectionPassword.enabled"
+                flex="1" />
+      <vbox align="end">
+        <button id="protectionPasswordSet"
+                is="highlightable-button"
+                class="accessory-button"
+                data-l10n-id="protection-password-set-button" />
+        <button id="protectionPasswordChange"
+                is="highlightable-button"
+                class="accessory-button"
+                data-l10n-id="protection-password-change-button" />
+        <button id="protectionPasswordDisable"
+                is="highlightable-button"
+                class="accessory-button"
+                data-l10n-id="protection-password-disable-button" />
+      </vbox>
+    </hbox>
+    <hbox class="indent" align="center">
+      <checkbox id="protectionPasswordLockOnStartup"
+                data-l10n-id="protection-password-lock-on-startup"
+                preference="browser.protectionPassword.lockOnStartup"
+                flex="1" />
+    </hbox>
+  </vbox>
+</groupbox>
+
 <html:setting-group groupid="passwords" hidden="true" data-category="panePrivacy" />
 
 <groupbox id="paymentsGroupBox"

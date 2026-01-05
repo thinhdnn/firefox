@@ -3,6 +3,10 @@ support-files = ["subdialog.xhtml"]
 
 ["browser_multiple_dialog_navigation.js"]
 
+["browser_protectionPassword_lock.js"]
+
+["browser_protectionPassword_ui.js"]
+
 ["browser_subdialog_esc.js"]
 support-files = ["loadDelayedReply.sjs"]
 
