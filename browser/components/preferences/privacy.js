@@ -224,6 +224,7 @@ Preferences.addAll([
   // Protection Password
   { id: "browser.protectionPassword.enabled", type: "bool" },
   { id: "browser.protectionPassword.lockOnStartup", type: "bool" },
+  { id: "browser.protectionPassword.idleLockTimeoutSeconds", type: "int" },
 
   // Buttons
   { id: "pref.privacy.disable_button.view_passwords", type: "bool" },
@@ -3950,8 +3951,29 @@ var gPrivacyPane = {
       this._openProtectionPasswordDisableDialog();
     });
 
+    let idleMinutes = document.getElementById(
+      "protectionPasswordIdleLockMinutes"
+    );
+    if (idleMinutes) {
+      idleMinutes.addEventListener("change", () => {
+        let minutes = parseInt(idleMinutes.value, 10);
+        if (!Number.isFinite(minutes) || minutes < 0) {
+          minutes = 0;
+        }
+        Preferences.get(
+          "browser.protectionPassword.idleLockTimeoutSeconds"
+        ).value = minutes * 60;
+        this._updateProtectionPasswordUI();
+      });
+    }
+
     Preferences.get("browser.protectionPassword.enabled").on("change", () =>
       this._updateProtectionPasswordUI()
+    );
+
+    Preferences.get("browser.protectionPassword.idleLockTimeoutSeconds").on(
+      "change",
+      () => this._updateProtectionPasswordUI()
     );
 
     this._updateProtectionPasswordUI();
@@ -3973,6 +3995,9 @@ var gPrivacyPane = {
     let lockOnStartup = document.getElementById(
       "protectionPasswordLockOnStartup"
     );
+    let idleMinutes = document.getElementById(
+      "protectionPasswordIdleLockMinutes"
+    );
 
     enableCheckbox.disabled = !passwordSet;
     enableCheckbox.checked = enabled;
@@ -3981,6 +4006,14 @@ var gPrivacyPane = {
     changeButton.disabled = !passwordSet;
     disableButton.disabled = !passwordSet || !enabled;
     lockOnStartup.disabled = !passwordSet || !enabled;
+
+    if (idleMinutes) {
+      idleMinutes.disabled = !passwordSet || !enabled;
+      idleMinutes.value = Math.floor(
+        Preferences.get("browser.protectionPassword.idleLockTimeoutSeconds").value /
+          60
+      );
+    }
   },
 
   _openProtectionPasswordSetDialog() {

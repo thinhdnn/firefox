@@ -3552,6 +3552,7 @@ pref("browser.ipProtection.added", false);
 // Protection Password (global browser lock)
 pref("browser.protectionPassword.enabled", false);
 pref("browser.protectionPassword.lockOnStartup", true);
+pref("browser.protectionPassword.idleLockTimeoutSeconds", 0);
 pref("browser.protectionPassword.pbkdf2Iterations", 200000);
 pref("browser.protectionPassword.salt", "");
 pref("browser.protectionPassword.verifier", "");

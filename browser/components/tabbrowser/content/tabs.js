@@ -1361,6 +1361,9 @@
      */
     _handleTabSelect(aInstant) {
       let selectedTab = this.selectedItem;
+      if (!selectedTab) {
+        return;
+      }
       this.#ensureTabIsVisible(selectedTab, aInstant);
 
       selectedTab._notselectedsinceload = false;

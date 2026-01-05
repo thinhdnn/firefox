@@ -81,6 +81,9 @@ export class AsyncTabSwitcher {
   constructor(tabbrowser) {
     this.log("START");
 
+    let selectedTab =
+      tabbrowser.selectedTab || tabbrowser.tabs?.[0] || tabbrowser.tabContainer?.selectedItem;
+
     // How long to wait for a tab's layers to load. After this
     // time elapses, we're free to put up the spinner and start
     // trying to load a different tab.
@@ -94,20 +97,20 @@ export class AsyncTabSwitcher {
     // See the assertions in postActions for their invariants.
 
     // Tab the user requested most recently.
-    this.requestedTab = tabbrowser.selectedTab;
+    this.requestedTab = selectedTab;
 
     // Tab we're currently trying to load.
     this.loadingTab = null;
 
     // We show this tab in case the requestedTab hasn't loaded yet.
-    this.lastVisibleTab = tabbrowser.selectedTab;
+    this.lastVisibleTab = selectedTab;
 
     // Auxilliary state variables:
 
-    this.visibleTab = tabbrowser.selectedTab; // Tab that's on screen.
+    this.visibleTab = selectedTab; // Tab that's on screen.
     this.spinnerTab = null; // Tab showing a spinner.
     this.blankTab = null; // Tab showing blank.
-    this.lastPrimaryTab = tabbrowser.selectedTab; // Tab with primary="true"
+    this.lastPrimaryTab = selectedTab; // Tab with primary="true"
 
     this.tabbrowser = tabbrowser;
     this.window = tabbrowser.ownerGlobal;
@@ -131,7 +134,7 @@ export class AsyncTabSwitcher {
     // drawn. A tab is added to this set when we ask to make it
     // visible. All tabs but the most recently shown tab are
     // removed from the set upon MozAfterPaint.
-    this.maybeVisibleTabs = new Set([tabbrowser.selectedTab]);
+    this.maybeVisibleTabs = new Set(selectedTab ? [selectedTab] : []);
 
     // This holds onto the set of tabs that we've been asked to warm up,
     // and tabs are evicted once they're done loading or are unloaded.
@@ -163,7 +166,11 @@ export class AsyncTabSwitcher {
     this.window.document.addEventListener("visibilitychange", this);
 
     let initialTab = this.requestedTab;
-    let initialBrowser = initialTab.linkedBrowser;
+    let initialBrowser = initialTab?.linkedBrowser;
+    if (!initialBrowser) {
+      this.destroy();
+      return;
+    }
 
     let tabIsLoaded =
       !initialBrowser.isRemoteBrowser ||
@@ -238,6 +245,10 @@ export class AsyncTabSwitcher {
 
       if (tab && tab.linkedPanel) {
         let b = tab.linkedBrowser;
+        if (!b) {
+          this.setTabStateNoAction(tab, state);
+          return state;
+        }
         if (b.renderLayers && b.hasLayers) {
           state = this.STATE_LOADED;
         } else if (b.renderLayers && !b.hasLayers) {
@@ -354,8 +365,25 @@ export class AsyncTabSwitcher {
   // This function is called after all the main state changes to
   // make sure we display the right tab.
   updateDisplay() {
-    let requestedTabState = this.getTabState(this.requestedTab);
-    let requestedBrowser = this.requestedTab.linkedBrowser;
+    let requestedTab = this.requestedTab;
+    let requestedBrowser = requestedTab?.linkedBrowser;
+    if (!requestedBrowser) {
+      if (this.blankTab?.linkedBrowser) {
+        this.blankTab.linkedBrowser.removeAttribute("blank");
+      }
+      this.blankTab = null;
+
+      if (this.spinnerTab) {
+        this.noteSpinnerHidden();
+        this.tabbrowser.tabpanels.removeAttribute("pendingpaint");
+        this.spinnerTab.linkedBrowser?.removeAttribute("pendingpaint");
+        this.spinnerTab = null;
+      }
+
+      return;
+    }
+
+    let requestedTabState = this.getTabState(requestedTab);
 
     // It is often more desirable to show a blank tab when appropriate than
     // the tab switch spinner - especially since the spinner is usually
@@ -376,7 +404,7 @@ export class AsyncTabSwitcher {
       // For (2), "finished loading a non-local-about: page" is
       // determined by the busy state on the tab element and checking
       // if the loaded URI is local.
-      let isBusy = this.requestedTab.hasAttribute("busy");
+      let isBusy = requestedTab.hasAttribute("busy");
       let isLocalAbout = requestedBrowser.currentURI.schemeIs("about");
       let hasSufficientlyLoaded = !isBusy && !isLocalAbout;
 
@@ -416,17 +444,33 @@ export class AsyncTabSwitcher {
       showTab = this.lastVisibleTab;
     } else {
       // Show the requested tab. If it's not available, we'll show the spinner or a blank tab.
-      showTab = this.requestedTab;
+      showTab = requestedTab;
+    }
+
+    if (!showTab?.linkedBrowser) {
+      if (this.blankTab?.linkedBrowser) {
+        this.blankTab.linkedBrowser.removeAttribute("blank");
+      }
+      this.blankTab = null;
+
+      if (this.spinnerTab) {
+        this.noteSpinnerHidden();
+        this.tabbrowser.tabpanels.removeAttribute("pendingpaint");
+        this.spinnerTab.linkedBrowser?.removeAttribute("pendingpaint");
+        this.spinnerTab = null;
+      }
+
+      return;
     }
 
     // First, let's deal with blank tabs, which we show instead
     // of the spinner when the tab is not currently set up
     // properly in the content process.
-    if (!shouldBeBlank && this.blankTab) {
+    if (!shouldBeBlank && this.blankTab?.linkedBrowser) {
       this.blankTab.linkedBrowser.removeAttribute("blank");
       this.blankTab = null;
     } else if (shouldBeBlank && this.blankTab !== showTab) {
-      if (this.blankTab) {
+      if (this.blankTab?.linkedBrowser) {
         this.blankTab.linkedBrowser.removeAttribute("blank");
       }
       this.blankTab = showTab;
@@ -443,11 +487,11 @@ export class AsyncTabSwitcher {
     if (!needSpinner && this.spinnerTab) {
       this.noteSpinnerHidden();
       this.tabbrowser.tabpanels.removeAttribute("pendingpaint");
-      this.spinnerTab.linkedBrowser.removeAttribute("pendingpaint");
+      this.spinnerTab.linkedBrowser?.removeAttribute("pendingpaint");
       this.spinnerTab = null;
     } else if (needSpinner && this.spinnerTab !== showTab) {
       if (this.spinnerTab) {
-        this.spinnerTab.linkedBrowser.removeAttribute("pendingpaint");
+        this.spinnerTab.linkedBrowser?.removeAttribute("pendingpaint");
       } else {
         this.noteSpinnerDisplayed();
       }
@@ -469,7 +513,7 @@ export class AsyncTabSwitcher {
       if (index != -1) {
         this.log(`Switch to tab ${index} - ${this.tinfo(showTab)}`);
         tabpanels.updateSelectedIndex(index);
-        if (showTab === this.requestedTab) {
+        if (showTab === requestedTab) {
           if (requestedTabState == this.STATE_LOADED) {
             // The new tab will be made visible in the next paint, record the expected
             // transaction id for that, and we'll mark when we get notified of its
@@ -481,7 +525,7 @@ export class AsyncTabSwitcher {
 
           this.tabbrowser._adjustFocusAfterTabSwitch(showTab);
           this.window.gURLBar.afterTabSwitchFocusChange();
-          this.maybeActivateDocShell(this.requestedTab);
+          this.maybeActivateDocShell(requestedTab);
         }
       }
 
@@ -565,8 +609,12 @@ export class AsyncTabSwitcher {
   // This function runs before every event. It fixes up the state
   // to account for closed tabs.
   preActions() {
-    this.assert(this.tabbrowser._switcher);
-    this.assert(this.tabbrowser._switcher === this);
+    // During teardown or when handling stale events, tabbrowser may have
+    // switched to a different switcher instance. Avoid assertion/TypeError
+    // spam by bailing out early in that case.
+    if (this.tabbrowser._switcher !== this) {
+      return;
+    }
 
     for (let i = 0; i < this.tabLayerCache.length; i++) {
       let tab = this.tabLayerCache[i];

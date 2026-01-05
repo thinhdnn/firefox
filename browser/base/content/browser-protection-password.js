@@ -15,6 +15,7 @@ var ProtectionPasswordUI = {
   _blocker: null,
   _cancelListener: null,
   _initializedWindowReady: false,
+  _activityListener: null,
   _blockedEventTypes: [
     "keydown",
     "keypress",
@@ -35,6 +36,8 @@ var ProtectionPasswordUI = {
     Services.obs.addObserver(this, "protection-password:focus");
 
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
+
+    this._installActivityListener();
   },
 
   observe(subject, topic) {
@@ -331,6 +334,32 @@ var ProtectionPasswordUI = {
       window.removeEventListener(type, this._blocker, true);
     }
     this._blocker = null;
+  },
+
+  _installActivityListener() {
+    if (this._activityListener) {
+      return;
+    }
+
+    let lastNote = 0;
+    this._activityListener = () => {
+      if (this._lockShown) {
+        return;
+      }
+      if (lazyProtectionPassword.ProtectionPasswordService.isLocked) {
+        return;
+      }
+      let now = Date.now();
+      if (now - lastNote < 1000) {
+        return;
+      }
+      lastNote = now;
+      lazyProtectionPassword.ProtectionPasswordService.noteUserActivity();
+    };
+
+    for (let type of ["keydown", "mousedown", "wheel", "touchstart"]) {
+      window.addEventListener(type, this._activityListener, { capture: true });
+    }
   },
 };
 

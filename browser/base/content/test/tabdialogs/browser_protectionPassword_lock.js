@@ -40,6 +40,7 @@ add_task(async function test_protection_password_lock_unlock_lockout_toolbar() {
     set: [
       ["browser.protectionPassword.enabled", true],
       ["browser.protectionPassword.lockOnStartup", false],
+      ["browser.protectionPassword.idleLockTimeoutSeconds", 0],
       ["browser.protectionPassword.pbkdf2Iterations", 1000],
       ["browser.protectionPassword.salt", ""],
       ["browser.protectionPassword.verifier", ""],
@@ -130,4 +131,13 @@ add_task(async function test_protection_password_lock_unlock_lockout_toolbar() {
       node.getAttribute("data-l10n-id") === "protection-password-toolbar-button"
     );
   }, "Widget should return to unlocked l10n id");
+
+  Services.prefs.setIntPref("browser.protectionPassword.idleLockTimeoutSeconds", 1);
+  ProtectionPasswordService.noteUserActivity();
+
+  await new Promise(resolve => setTimeout(resolve, 2500));
+  await TestUtils.waitForCondition(
+    () => ProtectionPasswordService.isLocked,
+    "Service should auto-lock after inactivity"
+  );
 });

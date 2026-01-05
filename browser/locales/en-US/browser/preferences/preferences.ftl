@@ -1503,6 +1503,10 @@ protection-password-disable-button =
 protection-password-lock-on-startup =
     .label = Lock { -brand-short-name } on startup
 
+protection-password-idle-lock-label = Auto-lock after inactivity
+
+protection-password-idle-lock-minutes = minutes
+
 protection-password-set-window =
     .title = Set Protection Password
 

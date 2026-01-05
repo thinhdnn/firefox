@@ -537,11 +537,14 @@ class TabTracker extends TabTrackerBase {
           // likely be active by the time the promise below resolves and the
           // event is dispatched.
           const currentTab = nativeTab.ownerGlobal.gBrowser.selectedTab;
-          const { frameLoader } = currentTab.linkedBrowser;
-          const currentTabSize = {
-            width: frameLoader.lazyWidth,
-            height: frameLoader.lazyHeight,
-          };
+          let currentTabSize = { width: 0, height: 0 };
+          const frameLoader = currentTab?.linkedBrowser?.frameLoader;
+          if (frameLoader) {
+            currentTabSize = {
+              width: frameLoader.lazyWidth,
+              height: frameLoader.lazyHeight,
+            };
+          }
 
           // We need to delay sending this event until the next tick, since the
           // tab can become selected immediately after "TabOpen", then onCreated

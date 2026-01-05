@@ -586,6 +586,22 @@
                 preference="browser.protectionPassword.lockOnStartup"
                 flex="1" />
     </hbox>
+
+    <hbox class="indent" align="center">
+      <label
+        data-l10n-id="protection-password-idle-lock-label"
+        control="protectionPasswordIdleLockMinutes"
+        flex="1"
+      />
+      <html:input
+        id="protectionPasswordIdleLockMinutes"
+        type="number"
+        min="0"
+        hidespinbuttons="true"
+        style="width: 5em"
+      />
+      <label data-l10n-id="protection-password-idle-lock-minutes" />
+    </hbox>
   </vbox>
 </groupbox>
 

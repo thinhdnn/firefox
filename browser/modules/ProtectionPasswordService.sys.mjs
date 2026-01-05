@@ -10,12 +10,15 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   CustomizableUI:
     "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
+  clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
 const PREF_BRANCH = "browser.protectionPassword.";
 
 const PREF_ENABLED = PREF_BRANCH + "enabled";
 const PREF_LOCK_ON_STARTUP = PREF_BRANCH + "lockOnStartup";
+const PREF_IDLE_LOCK_TIMEOUT_SECONDS = PREF_BRANCH + "idleLockTimeoutSeconds";
 const PREF_SALT = PREF_BRANCH + "salt";
 const PREF_VERIFIER = PREF_BRANCH + "verifier";
 const PREF_PBKDF2_ITERS = PREF_BRANCH + "pbkdf2Iterations";
@@ -115,6 +118,9 @@ export const ProtectionPasswordService = new (class {
   #initialized = false;
   #widgetCreated = false;
   #locked = false;
+  #idleTimer = null;
+  #idleTimerGeneration = 0;
+  #lastActivityMs = 0;
 
   maybeEarlyInit() {
     if (this.#initialized) {
@@ -122,10 +128,16 @@ export const ProtectionPasswordService = new (class {
     }
     this.#initialized = true;
 
+    Services.prefs.addObserver(PREF_ENABLED, this);
+    Services.prefs.addObserver(PREF_IDLE_LOCK_TIMEOUT_SECONDS, this);
+
     if (this.enabled && this.lockOnStartup) {
       this.#locked = true;
       Services.obs.notifyObservers(null, TOPIC_LOCKED);
     }
+
+    this.#lastActivityMs = Date.now();
+    this.#updateIdleTimer();
   }
 
   init() {
@@ -135,6 +147,19 @@ export const ProtectionPasswordService = new (class {
       this.#createWidget();
       this.#widgetCreated = true;
     }
+
+    this.#updateIdleTimer();
+  }
+
+  observe(_subject, topic, data) {
+    if (topic !== "nsPref:changed") {
+      return;
+    }
+    if (data !== PREF_ENABLED && data !== PREF_IDLE_LOCK_TIMEOUT_SECONDS) {
+      return;
+    }
+    this.#lastActivityMs = Date.now();
+    this.#updateIdleTimer();
   }
 
   get enabled() {
@@ -153,12 +178,29 @@ export const ProtectionPasswordService = new (class {
     Services.prefs.setBoolPref(PREF_LOCK_ON_STARTUP, !!value);
   }
 
+  get idleLockTimeoutSeconds() {
+    return Services.prefs.getIntPref(PREF_IDLE_LOCK_TIMEOUT_SECONDS, 0);
+  }
+
+  set idleLockTimeoutSeconds(value) {
+    Services.prefs.setIntPref(PREF_IDLE_LOCK_TIMEOUT_SECONDS, Math.max(0, value | 0));
+  }
+
   get isPasswordSet() {
     return !!Services.prefs.getStringPref(PREF_VERIFIER, "");
   }
 
   get isLocked() {
     return this.#locked;
+  }
+
+  noteUserActivity() {
+    this.maybeEarlyInit();
+    if (!this.enabled || !this.isPasswordSet || this.#locked) {
+      return;
+    }
+    this.#lastActivityMs = Date.now();
+    this.#updateIdleTimer();
   }
 
   lock() {
@@ -171,6 +213,7 @@ export const ProtectionPasswordService = new (class {
       return;
     }
     this.#locked = true;
+    this.#clearIdleTimer();
     Services.obs.notifyObservers(null, TOPIC_LOCKED);
     this.#updateWidgetWindows();
   }
@@ -230,6 +273,9 @@ export const ProtectionPasswordService = new (class {
     Services.obs.notifyObservers(null, TOPIC_UNLOCKED);
     this.#updateWidgetWindows();
 
+    this.#lastActivityMs = Date.now();
+    this.#updateIdleTimer();
+
     return { ok: true };
   }
 
@@ -251,6 +297,9 @@ export const ProtectionPasswordService = new (class {
 
     Services.prefs.setIntPref(PREF_FAILURE_COUNT, 0);
     Services.prefs.setIntPref(PREF_LOCKOUT_UNTIL, 0);
+
+    this.#lastActivityMs = Date.now();
+    this.#updateIdleTimer();
   }
 
   async changePassword(currentPassword, newPassword) {
@@ -270,6 +319,8 @@ export const ProtectionPasswordService = new (class {
 
     this.enabled = false;
 
+    this.#clearIdleTimer();
+
     Services.prefs.clearUserPref(PREF_SALT);
     Services.prefs.clearUserPref(PREF_VERIFIER);
 
@@ -283,6 +334,44 @@ export const ProtectionPasswordService = new (class {
     }
 
     return { ok: true };
+  }
+
+  #clearIdleTimer() {
+    if (!this.#idleTimer) {
+      return;
+    }
+    lazy.clearTimeout(this.#idleTimer);
+    this.#idleTimer = null;
+    this.#idleTimerGeneration++;
+  }
+
+  #updateIdleTimer() {
+    this.#clearIdleTimer();
+
+    if (!this.enabled || !this.isPasswordSet || this.#locked) {
+      return;
+    }
+
+    let timeoutSeconds = this.idleLockTimeoutSeconds;
+    if (!timeoutSeconds) {
+      return;
+    }
+
+    let timeoutMs = timeoutSeconds * 1000;
+    let remainingMs = timeoutMs - (Date.now() - this.#lastActivityMs);
+    if (remainingMs <= 0) {
+      this.lock();
+      return;
+    }
+
+    let generation = ++this.#idleTimerGeneration;
+    this.#idleTimer = lazy.setTimeout(() => {
+      if (generation !== this.#idleTimerGeneration) {
+        return;
+      }
+      this.#idleTimer = null;
+      this.lock();
+    }, remainingMs);
   }
 
   async #verifyPassword(password) {
